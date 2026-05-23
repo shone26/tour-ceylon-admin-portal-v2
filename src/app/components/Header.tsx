@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router";
-import { Search, ChevronRight, ChevronDown, Bell, HelpCircle, ArrowLeft, Sun, Moon, Command } from "lucide-react";
+import { Search, ChevronRight, ChevronDown, Bell, HelpCircle, ArrowLeft, Sun, Moon, Command, Eye, EyeOff } from "lucide-react";
 import { useTheme } from "../contexts/ThemeContext";
 import { MobileNav } from "./MobileNav";
 import { CommandPalette } from "./shared/CommandPalette";
@@ -10,7 +10,7 @@ const DATA_LAYERS = ["Production", "Staging", "Development", "Preview"];
 
 export function Header() {
   const { theme, toggleTheme } = useTheme();
-  const { user } = useAuth();
+  const { user, viewAsVendor, toggleViewAsVendor } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [dataLayer, setDataLayer] = useState("Production");
@@ -115,6 +115,50 @@ export function Header() {
 
       {/* Spacer */}
       <div className="flex-1" />
+
+      {/* View as Vendor toggle — dev helper, admin only */}
+      {user?.role === "admin" && (
+        <button
+          id="view-as-vendor-toggle"
+          onClick={() => {
+            toggleViewAsVendor();
+            // Navigate to dashboard to avoid landing on an admin-restricted page
+            navigate("/dashboard");
+          }}
+          className="hidden md:flex items-center gap-1.5 px-3 h-8 rounded-lg text-[12px] font-medium transition-all shrink-0"
+          style={{
+            background: viewAsVendor
+              ? "linear-gradient(135deg, #7c3aed22, #7c3aed44)"
+              : "var(--hover-overlay)",
+            border: viewAsVendor
+              ? "1px solid #7c3aed"
+              : "1px solid var(--border-light)",
+            color: viewAsVendor ? "#a78bfa" : "var(--text-tertiary)",
+          }}
+          onMouseEnter={(e) => {
+            if (!viewAsVendor) {
+              (e.currentTarget as HTMLElement).style.borderColor = "#7c3aed";
+              (e.currentTarget as HTMLElement).style.color = "#a78bfa";
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!viewAsVendor) {
+              (e.currentTarget as HTMLElement).style.borderColor = "var(--border-light)";
+              (e.currentTarget as HTMLElement).style.color = "var(--text-tertiary)";
+            }
+          }}
+          title={viewAsVendor ? "Exit vendor preview" : "Preview portal as a vendor"}
+        >
+          {viewAsVendor ? <EyeOff size={13} /> : <Eye size={13} />}
+          <span>{viewAsVendor ? "Exit Vendor View" : "View as Vendor"}</span>
+          {viewAsVendor && (
+            <span
+              className="ml-0.5 w-1.5 h-1.5 rounded-full animate-pulse"
+              style={{ background: "#a78bfa", boxShadow: "0 0 5px #a78bfa" }}
+            />
+          )}
+        </button>
+      )}
 
       {/* Command Palette Button - Icon only on mobile, full on desktop */}
       <button

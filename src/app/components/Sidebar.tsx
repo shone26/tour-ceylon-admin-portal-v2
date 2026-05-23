@@ -144,7 +144,7 @@ const ROUTE_MAP: Record<string, string> = {
 };
 
 export function Sidebar() {
-  const { user, logout } = useAuth();
+  const { user, effectiveUser, logout, viewAsVendor, toggleViewAsVendor } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -216,9 +216,9 @@ export function Sidebar() {
 
   const activeSection = getActiveSection();
 
-  const isAdmin = user?.role === "admin";
-  const isVendor = user?.role === "vendor";
-  const approvedCategories = user?.approvedCategories || [];
+  const isAdmin = effectiveUser?.role === "admin";
+  const isVendor = effectiveUser?.role === "vendor";
+  const approvedCategories = effectiveUser?.approvedCategories || [];
   const isStayVendor = isVendor && approvedCategories.length === 1 && approvedCategories.includes("Stay");
 
   // Build dynamic navigation based on role
@@ -518,6 +518,23 @@ export function Sidebar() {
         borderRight: "1px solid var(--border-light)",
       }}
     >
+      {/* Vendor Preview Banner */}
+      {viewAsVendor && (
+        <button
+          onClick={() => toggleViewAsVendor()}
+          className="flex items-center justify-center gap-1.5 w-full py-1.5 text-[10px] font-semibold tracking-wider uppercase transition-all shrink-0"
+          style={{
+            background: "linear-gradient(90deg, #7c3aed, #6d28d9)",
+            color: "white",
+            letterSpacing: "0.08em",
+          }}
+          title="Click to exit vendor preview"
+        >
+          <span className="w-1.5 h-1.5 rounded-full bg-white/60 animate-pulse" />
+          Vendor Preview — Click to Exit
+        </button>
+      )}
+
       {/* Logo */}
       <div
         className="flex items-center gap-2.5 px-5 py-5"
@@ -632,8 +649,14 @@ export function Sidebar() {
               <p className="text-[12px] truncate" style={{ color: "var(--text-primary)", fontWeight: 500 }}>
                 {user?.name}
               </p>
-              <p className="text-[10px] truncate capitalize" style={{ color: "var(--text-tertiary)" }}>
-                {user?.role}
+              <p
+                className="text-[10px] truncate capitalize"
+                style={{
+                  color: viewAsVendor ? "#a78bfa" : "var(--text-tertiary)",
+                  fontWeight: viewAsVendor ? 600 : 400,
+                }}
+              >
+                {effectiveUser?.role}{viewAsVendor && " ✦ preview"}
               </p>
             </div>
           </div>

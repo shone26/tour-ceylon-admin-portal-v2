@@ -19,9 +19,14 @@ export interface User {
 
 interface AuthContextType {
   user: User | null;
+  /** effectiveUser is what the UI should use — swapped to vendor role when viewAsVendor is active */
+  effectiveUser: User | null;
   isAuthenticated: boolean;
   loading: boolean;
   error: string | null;
+  /** Dev-only: true when an admin is previewing as a vendor */
+  viewAsVendor: boolean;
+  toggleViewAsVendor: () => void;
   logout: () => Promise<void>;
   register: (data: VendorRegistrationData) => Promise<void>;
 }
@@ -45,6 +50,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Dev-only view-as-vendor toggle — persisted in sessionStorage so it survives hot reload
+  const [viewAsVendor, setViewAsVendor] = useState<boolean>(
+    () => sessionStorage.getItem("dev:viewAsVendor") === "true"
+  );
+
+  const toggleViewAsVendor = () => {
+    setViewAsVendor((prev) => {
+      const next = !prev;
+      sessionStorage.setItem("dev:viewAsVendor", String(next));
+      return next;
+    });
+  };
+
+  // Computed: what the UI renders — admin stays real, but role is spoofed when toggle is on
+  const effectiveUser: User | null =
+    user && user.role === "admin" && viewAsVendor
+      ? {
+          ...user,
+          role: "vendor",
+          vendorStatus: "approved",
+          approvedCategories: user.approvedCategories?.length
+            ? user.approvedCategories
+            : ["Stay", "Tour", "Safari", "Experience", "Transfer"],
+          company: user.company || "Voyage Operations",
+        }
+      : user;
 
   useEffect(() => {
     async function syncProfile() {
@@ -197,9 +228,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider
       value={{
         user,
+        effectiveUser,
         isAuthenticated: !!user,
         loading,
         error,
+        viewAsVendor,
+        toggleViewAsVendor,
         logout,
         register,
       }}

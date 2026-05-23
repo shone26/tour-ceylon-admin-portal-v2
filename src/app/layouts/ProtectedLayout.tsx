@@ -5,7 +5,7 @@ import { Header } from "../components/Header";
 import { Compass, AlertTriangle, ShieldAlert, LogOut, Lock } from "lucide-react";
 
 export function ProtectedLayout() {
-  const { isAuthenticated, user, loading, error, logout } = useAuth();
+  const { isAuthenticated, user, effectiveUser, loading, error, logout } = useAuth();
   const location = useLocation();
 
   // 1. Loading State Screen
@@ -79,13 +79,13 @@ export function ProtectedLayout() {
   }
 
   // 3. Pending Vendor Routing
-  if (user.role === "vendor" && user.vendorStatus === "pending") {
+  if (effectiveUser?.role === "vendor" && effectiveUser?.vendorStatus === "pending") {
     return <Navigate to="/pending" replace />;
   }
 
   // 4. Block Rejected / Suspended Vendors
-  if (user.role === "vendor" && (user.vendorStatus === "rejected" || user.vendorStatus === "suspended")) {
-    const isSuspended = user.vendorStatus === "suspended";
+  if (effectiveUser?.role === "vendor" && (effectiveUser?.vendorStatus === "rejected" || effectiveUser?.vendorStatus === "suspended")) {
+    const isSuspended = effectiveUser?.vendorStatus === "suspended";
     return (
       <div
         className="min-h-screen flex items-center justify-center p-6"
@@ -155,7 +155,7 @@ export function ProtectedLayout() {
     location.pathname.startsWith("/qa-checklist") ||
     location.pathname.startsWith("/settings/");
 
-  if (user.role === "vendor" && isAdminPath) {
+  if (effectiveUser?.role === "vendor" && isAdminPath) {
     console.warn(`Vendor unauthorized for admin path: ${location.pathname}`);
     return <Navigate to="/dashboard" replace />;
   }
