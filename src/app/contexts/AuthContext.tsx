@@ -1,11 +1,14 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { useAuth as useClerkAuth, useUser as useClerkUser } from "@clerk/clerk-react";
+import { apiFetch } from "../components/api/apiClient";
 
-export type UserRole = "admin" | "vendor";
+export type UserRole = "admin" | "vendor" | "customer/client";
 export type VendorStatus = "pending" | "approved" | "rejected" | "suspended";
 export type Category = "Stay" | "Tour" | "Safari" | "Experience" | "Transfer";
 
 export interface User {
   id: string;
+  clerkUserId: string;
   email: string;
   name: string;
   role: UserRole;
@@ -17,8 +20,9 @@ export interface User {
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
-  login: (email: string, password: string, role: UserRole) => Promise<void>;
-  logout: () => void;
+  loading: boolean;
+  error: string | null;
+  logout: () => Promise<void>;
   register: (data: VendorRegistrationData) => Promise<void>;
 }
 
@@ -35,85 +39,158 @@ export interface VendorRegistrationData {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const { isLoaded, isSignedIn, signOut, userId } = useClerkAuth();
+  const { user: clerkUser } = useClerkUser();
+
   const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Check for existing session
-    const savedUser = localStorage.getItem("voyage-user");
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
+    async function syncProfile() {
+      // If Clerk is not loaded yet, keep loading
+      if (!isLoaded) {
+        setLoading(true);
+        return;
+      }
+
+      // If not signed in to Clerk, clear auth states and stop loading
+      if (!isSignedIn || !userId || !clerkUser) {
+        setUser(null);
+        setError(null);
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+
+      try {
+        // 1. Call backend /users/me or /users/sync endpoint to resolve local DB record
+        // The backend automatically auto-provisions or resolves the local user record using get_current_user
+        const backendUser = await apiFetch("/users/me");
+
+        if (!backendUser) {
+          throw new Error("Unable to retrieve backend user profile.");
+        }
+
+        // 2. Resolve Role (admin / vendor / customer/client)
+        // Map backend enums ("admin", "vendor", "tourist", "support") to frontend roles
+        let role: UserRole = "customer/client";
+        if (backendUser.role === "admin" || backendUser.role === "support") {
+          role = "admin";
+        } else if (backendUser.role === "vendor") {
+          role = "vendor";
+        }
+
+        // Block customer/client role from entering the admin/vendor portal
+        if (role === "customer/client") {
+          throw new Error("Customer accounts are not authorized to access the management portal.");
+        }
+
+        // 3. Resolve Vendor Status & Approved Categories
+        // Since backend uses standard model, read status, categories, and company details 
+        // primarily from backendUser, and fallback to Clerk metadata or secure defaults
+        const clerkMetadata = clerkUser.publicMetadata || {};
+        const vendorStatus =
+          (backendUser.vendorStatus || backendUser.vendor_status || clerkMetadata.vendorStatus as VendorStatus) ||
+          "approved";
+        const approvedCategories =
+          (backendUser.approvedCategories || backendUser.approved_categories || clerkMetadata.approvedCategories as Category[]) || [
+            "Stay", "Tour", "Safari", "Experience", "Transfer"
+          ];
+        const company =
+          (backendUser.company || backendUser.company_name || clerkMetadata.company as string) ||
+          "Voyage Operations";
+
+        const normalizedUser: User = {
+          id: backendUser.id || backendUser.clerk_user_id || userId,
+          clerkUserId: userId,
+          email: backendUser.email || clerkUser.primaryEmailAddress?.emailAddress || "",
+          name: backendUser.full_name || clerkUser.fullName || "Management Member",
+          role,
+          vendorStatus,
+          approvedCategories,
+          company,
+        };
+
+        setUser(normalizedUser);
+      } catch (err: any) {
+        console.error("Backend auth profile synchronization failed:", err);
+        setError(err.message || "Authentication synchronization failed. Please try again.");
+        setUser(null);
+      } finally {
+        setLoading(false);
+      }
     }
-  }, []);
 
-  const login = async (email: string, password: string, role: UserRole) => {
-    // Simulate login - in production this would be an API call
-    await new Promise((resolve) => setTimeout(resolve, 800));
+    syncProfile();
+  }, [isLoaded, isSignedIn, userId, clerkUser]);
 
-    // Mock users for demo
-    if (role === "admin" && email === "admin@voyage.com" && password === "admin") {
-      const adminUser: User = {
-        id: "admin_1",
-        email: "admin@voyage.com",
-        name: "Admin User",
-        role: "admin",
-      };
-      setUser(adminUser);
-      localStorage.setItem("voyage-user", JSON.stringify(adminUser));
-    } else if (role === "vendor") {
-      // Hotel vendor: email containing "hotel" or "stay" or "jetwing"
-      const isHotelVendor =
-        email.toLowerCase().includes("hotel") ||
-        email.toLowerCase().includes("stay") ||
-        email.toLowerCase().includes("jetwing");
-
-      const vendorUser: User = isHotelVendor
-        ? {
-            id: "vendor_hotel",
-            email: email,
-            name: "Jetwing Yala",
-            role: "vendor",
-            vendorStatus: "approved",
-            approvedCategories: ["Stay"],
-            company: "Jetwing Hotels",
-          }
-        : {
-            id: "vendor_1",
-            email: email,
-            name: "Safari Adventures LK",
-            role: "vendor",
-            vendorStatus: "approved",
-            approvedCategories: ["Stay", "Safari", "Tour"],
-            company: "Safari Adventures Lanka",
-          };
-      setUser(vendorUser);
-      localStorage.setItem("voyage-user", JSON.stringify(vendorUser));
-    } else {
-      throw new Error("Invalid credentials");
+  const logout = async () => {
+    setLoading(true);
+    try {
+      await signOut();
+      setUser(null);
+      setError(null);
+    } catch (err) {
+      console.error("Logout failed:", err);
+    } finally {
+      setLoading(false);
     }
-  };
-
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem("voyage-user");
   };
 
   const register = async (data: VendorRegistrationData) => {
-    // Simulate registration - in production this would be an API call
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    setLoading(true);
+    try {
+      let responseUser;
+      if (isSignedIn) {
+        // If already signed in to Clerk, call the apply-vendor endpoint to update/apply for vendor role
+        responseUser = await apiFetch("/users/apply-vendor", {
+          method: "POST",
+          body: JSON.stringify(data),
+        });
+      } else {
+        // Otherwise, create a new pending vendor user profile
+        responseUser = await apiFetch("/users/", {
+          method: "POST",
+          body: JSON.stringify({
+            clerk_user_id: null,
+            email: data.email,
+            full_name: data.vendorName,
+            country: data.country,
+            role: "vendor",
+            is_active: true,
+            vendor_status: "pending",
+            company_name: data.businessName,
+            approved_categories: data.categories,
+            business_profile: {
+              phone: data.phone,
+              description: data.businessDescription,
+            },
+          }),
+        });
+      }
 
-    // Create pending vendor user
-    const newVendor: User = {
-      id: `vendor_${Date.now()}`,
-      email: data.email,
-      name: data.vendorName,
-      role: "vendor",
-      vendorStatus: "pending",
-      approvedCategories: [],
-      company: data.businessName,
-    };
-
-    setUser(newVendor);
-    localStorage.setItem("voyage-user", JSON.stringify(newVendor));
+      // After registering/applying, set user in state to simulate immediate transition or updated profile
+      const pendingUser: User = {
+        id: responseUser?.id || userId || `vendor_${Date.now()}`,
+        clerkUserId: userId || "",
+        email: data.email,
+        name: data.vendorName,
+        role: "vendor",
+        vendorStatus: "pending",
+        approvedCategories: data.categories,
+        company: data.businessName,
+      };
+      setUser(pendingUser);
+      setError(null); // Clear any access denied errors so the pending approval screen renders correctly
+    } catch (err: any) {
+      console.error("Vendor registration failed:", err);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -121,7 +198,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         isAuthenticated: !!user,
-        login,
+        loading,
+        error,
         logout,
         register,
       }}

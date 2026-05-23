@@ -4,11 +4,13 @@ import { Search, ChevronRight, ChevronDown, Bell, HelpCircle, ArrowLeft, Sun, Mo
 import { useTheme } from "../contexts/ThemeContext";
 import { MobileNav } from "./MobileNav";
 import { CommandPalette } from "./shared/CommandPalette";
+import { useAuth } from "../contexts/AuthContext";
 
 const DATA_LAYERS = ["Production", "Staging", "Development", "Preview"];
 
 export function Header() {
   const { theme, toggleTheme } = useTheme();
+  const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [dataLayer, setDataLayer] = useState("Production");
@@ -268,15 +270,16 @@ export function Header() {
 
       {/* Avatar */}
       <div
-        className="w-8 h-8 rounded-full flex items-center justify-center text-[12px] shrink-0 cursor-pointer"
+        className="w-8 h-8 rounded-full flex items-center justify-center text-[12px] shrink-0 cursor-pointer uppercase"
         style={{
           background: "linear-gradient(135deg, var(--accent-navy-dark), var(--accent-navy))",
           boxShadow: "0 0 0 2px var(--border-accent)",
           color: "white",
           fontWeight: 600,
         }}
+        title={user?.name || "User Profile"}
       >
-        AK
+        {user?.name ? user.name.substring(0, 2).toUpperCase() : "U"}
       </div>
 
       {/* Command Palette */}

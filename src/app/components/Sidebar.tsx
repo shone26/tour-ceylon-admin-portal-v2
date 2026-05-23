@@ -626,7 +626,7 @@ export function Sidebar() {
                 fontWeight: 600,
               }}
             >
-              {user?.name.substring(0, 2).toUpperCase()}
+              {user?.name ? user.name.substring(0, 2).toUpperCase() : "U"}
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-[12px] truncate" style={{ color: "var(--text-primary)", fontWeight: 500 }}>
